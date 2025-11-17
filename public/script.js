@@ -124,20 +124,24 @@ async function searchCNPJ(cnpj) {
   disableSearchButton(true);
 
   try {
-    const response = await fetch(`${API_BASE_URL}?cnpj=${cnpj}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    console.log("Fazendo requisição para:", `${API_BASE_URL}?cnpj=${cnpj}`);
+
+    const response = await fetch(`${API_BASE_URL}?cnpj=${cnpj}`);
+
+    console.log("Status da resposta:", response.status);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `Erro ${response.status}`);
+    }
 
     const result = await response.json();
 
-    if (!response.ok || result.error) {
-      throw new Error(result.message || `Erro ${response.status} na consulta`);
+    if (result.error) {
+      throw new Error(result.message);
     }
 
-    console.log("Dados recebidos:", result.data);
+    console.log("Dados recebidos com sucesso:", result.data);
     displayData(result.data);
   } catch (error) {
     console.error("Erro na consulta:", error);
@@ -148,7 +152,7 @@ async function searchCNPJ(cnpj) {
   }
 }
 
-// Função para exibir os dados no HTML
+// Função para exibir os dados no HTML (ATUALIZADA para nova estrutura)
 function displayData(data) {
   // Verificar se os dados básicos existem
   if (!data || !data.taxId) {
@@ -156,9 +160,11 @@ function displayData(data) {
     return;
   }
 
-  // Dados básicos da empresa
-  companyName.textContent = data.name || "Não informado";
-  tradeName.textContent = data.tradeName || "Não informado";
+  console.log("Estrutura completa dos dados:", data);
+
+  // Dados básicos da empresa - NOVA ESTRUTURA
+  companyName.textContent = data.company?.name || "Não informado";
+  tradeName.textContent = data.alias || data.company?.name || "Não informado";
   cnpj.textContent = formatCNPJString(data.taxId) || "Não informado";
 
   // Situação cadastral com cor
@@ -168,14 +174,13 @@ function displayData(data) {
     "value " +
     (statusText.toLowerCase().includes("ativa") ? "status-active" : "");
 
-  // Endereço
+  // Endereço - NOVA ESTRUTURA
   const addressParts = [
     data.address?.street,
     data.address?.number,
-    data.address?.complement,
     data.address?.district,
-    data.address?.city?.name,
-    data.address?.state?.code,
+    data.address?.city,
+    data.address?.state,
   ]
     .filter((part) => part)
     .join(", ");
@@ -185,58 +190,76 @@ function displayData(data) {
     : "";
   address.textContent = addressParts + zipCode || "Não informado";
 
-  // CNAE
+  // CNAE Principal
   cnae.textContent = data.mainActivity?.text || "Não informado";
 
-  // Telefones
+  // Telefones - NOVA ESTRUTURA
   const phoneNumbers =
-    data.phones?.map((phone) => formatPhone(phone.number)).join(", ") ||
-    "Não informado";
+    data.phones
+      ?.map((phone) => {
+        if (phone.area && phone.number) {
+          return formatPhone(`${phone.area}${phone.number}`);
+        }
+        return phone.number;
+      })
+      .join(", ") || "Não informado";
   phones.textContent = phoneNumbers;
 
-  // E-mail
-  email.textContent = data.emails?.[0]?.address || "Não informado";
+  // E-mail - NOVA ESTRUTURA
+  const primaryEmail =
+    data.emails?.find((email) => email.ownership === "CORPORATE") ||
+    data.emails?.[0];
+  email.textContent = primaryEmail?.address || "Não informado";
 
-  // Sócios
-  displayPartners(data.partners);
+  // Sócios e Administradores - NOVA ESTRUTURA
+  displayPartners(data.company?.members);
 
   // Exibir resultados
   showResult();
 }
 
-// Função para exibir os sócios
-function displayPartners(partners) {
+// Função para exibir os sócios (ATUALIZADA para nova estrutura)
+function displayPartners(members) {
   partnersList.innerHTML = "";
 
-  if (!partners || partners.length === 0) {
+  if (!members || members.length === 0) {
     partnersCard.classList.add("hidden");
     return;
   }
 
-  partners.forEach((partner) => {
+  // Ordenar por data (mais recente primeiro)
+  const sortedMembers = [...members].sort(
+    (a, b) => new Date(b.since) - new Date(a.since)
+  );
+
+  sortedMembers.forEach((member) => {
     const partnerItem = document.createElement("div");
     partnerItem.className = "partner-item";
 
     const partnerName = document.createElement("div");
     partnerName.className = "partner-name";
-    partnerName.textContent = partner.name || "Não informado";
+    partnerName.textContent = member.person?.name || "Não informado";
 
-    const partnerDocument = document.createElement("div");
-    partnerDocument.className = "partner-document";
-    const documentType = partner.taxId?.length === 11 ? "CPF" : "CNPJ";
-    partnerDocument.textContent = `${documentType}: ${
-      formatDocument(partner.taxId) || "Não informado"
+    const partnerRole = document.createElement("div");
+    partnerRole.className = "partner-document";
+    partnerRole.textContent = `Cargo: ${member.role?.text || "Não informado"}`;
+
+    const partnerSince = document.createElement("div");
+    partnerSince.className = "partner-qualification";
+    partnerSince.textContent = `Desde: ${
+      formatDate(member.since) || "Não informado"
     }`;
 
-    const partnerQualification = document.createElement("div");
-    partnerQualification.className = "partner-qualification";
-    partnerQualification.textContent = `Qualificação: ${
-      partner.qualification?.text || "Não informada"
+    const partnerAge = document.createElement("div");
+    partnerAge.className = "partner-qualification";
+    partnerAge.textContent = `Faixa Etária: ${
+      member.person?.age || "Não informada"
     }`;
 
     partnerItem.appendChild(partnerName);
-    partnerItem.appendChild(partnerDocument);
-    partnerItem.appendChild(partnerQualification);
+    partnerItem.appendChild(partnerRole);
+    partnerItem.appendChild(partnerSince);
+    partnerItem.appendChild(partnerAge);
 
     partnersList.appendChild(partnerItem);
   });
@@ -258,18 +281,6 @@ function formatCEP(cep) {
   return cep.replace(/(\d{5})(\d{3})/, "$1-$2");
 }
 
-// Função para formatar CPF/CNPJ de sócios
-function formatDocument(doc) {
-  if (!doc) return "";
-  doc = doc.replace(/\D/g, "");
-  if (doc.length === 11) {
-    return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  } else if (doc.length === 14) {
-    return formatCNPJString(doc);
-  }
-  return doc;
-}
-
 // Função para formatar telefone
 function formatPhone(phone) {
   if (!phone) return "";
@@ -278,8 +289,21 @@ function formatPhone(phone) {
     return phone.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
   } else if (phone.length === 10) {
     return phone.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+  } else if (phone.length === 8) {
+    return phone.replace(/(\d{4})(\d{4})/, "$1-$2");
   }
   return phone;
+}
+
+// Função para formatar data
+function formatDate(dateString) {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("pt-BR");
+  } catch (e) {
+    return dateString;
+  }
 }
 
 // Funções auxiliares para exibir/ocultar elementos
