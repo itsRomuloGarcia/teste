@@ -12,7 +12,8 @@
   ],
   "routes": [
     {
-      "src": "/api/cnpj/(.*)",
+      "src": "/api/cnpj",
+      "methods": ["GET"],
       "dest": "/api/cnpj.js"
     },
     {
