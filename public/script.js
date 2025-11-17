@@ -49,6 +49,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Focar no input ao carregar a página
   cnpjInput.focus();
+  
+  // Carregar tema salvo
+  loadSavedTheme();
 });
 
 // Função para alternar entre tabs
@@ -172,51 +175,31 @@ async function searchCNPJ(cnpj) {
     console.log("🔍 Fazendo requisição para:", `${API_BASE_URL}?cnpj=${cnpj}`);
 
     const response = await fetch(`${API_BASE_URL}?cnpj=${cnpj}`);
+    const responseText = await response.text();
 
     console.log("📊 Status da resposta:", response.status);
-    console.log("✅ Response OK:", response.ok);
-
-    // Primeiro, ler a resposta como texto
-    const responseText = await response.text();
-    console.log("📄 Resposta (texto):", responseText.substring(0, 200));
 
     if (!response.ok) {
-      // Se não é OK, tentar parsear como JSON para obter mensagem de erro
       let errorMessage = `Erro ${response.status}`;
-
       try {
         const errorData = JSON.parse(responseText);
         errorMessage = errorData.message || errorMessage;
       } catch (e) {
-        // Se não é JSON, usar o texto direto
-        if (
-          responseText.includes("<!DOCTYPE") ||
-          responseText.includes("<html")
-        ) {
-          errorMessage = "Servidor retornou página HTML inesperada";
-        } else if (responseText.trim()) {
+        if (responseText.trim()) {
           errorMessage = responseText;
         }
       }
-
       throw new Error(errorMessage);
     }
 
-    // Se response.ok é true, tentar parsear como JSON
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (e) {
-      console.error("❌ Erro ao parsear JSON:", e);
-      throw new Error("Resposta da API inválida (não é JSON)");
-    }
+    // Parsear a resposta
+    const result = JSON.parse(responseText);
 
     if (result.error) {
       throw new Error(result.message);
     }
 
     console.log("✅ Dados recebidos com sucesso");
-    console.log("📦 Estrutura completa:", result.data);
     displayData(result.data);
   } catch (error) {
     console.error("💥 Erro na consulta:", error);
@@ -236,24 +219,20 @@ function displayData(data) {
   }
 
   console.log("📦 Estrutura completa dos dados:", data);
-  console.log("📋 Dados completos do registrations:", data.registrations);
 
   // Dados básicos da empresa (Aba Principal)
   companyName.textContent = data.company?.name || "Não informado";
   tradeName.textContent = data.alias || data.company?.name || "Não informado";
   cnpj.textContent = formatCNPJString(data.taxId) || "Não informado";
 
-  // Inscrição Estadual - Buscar no array registrations (CORRIGIDO)
+  // Inscrição Estadual - Buscar no array registrations
   const iePrincipal = getPrincipalIE(data.registrations);
-  console.log("🎯 IE Principal encontrada:", iePrincipal);
   ie.textContent = iePrincipal || "Não informado";
 
   // Situação cadastral com cor
   const statusText = data.status?.text || "Não informado";
   status.textContent = statusText;
-  status.className =
-    "value " +
-    (statusText.toLowerCase().includes("ativa") ? "status-active" : "");
+  status.className = "value " + (statusText.toLowerCase().includes("ativa") ? "status-active" : "");
 
   // Endereço
   const addressParts = [
@@ -267,30 +246,23 @@ function displayData(data) {
     .filter((part) => part)
     .join(", ");
 
-  const zipCode = data.address?.zip
-    ? ` - CEP: ${formatCEP(data.address.zip)}`
-    : "";
+  const zipCode = data.address?.zip ? ` - CEP: ${formatCEP(data.address.zip)}` : "";
   address.textContent = addressParts + zipCode || "Não informado";
 
   // CNAE Principal
   cnae.textContent = data.mainActivity?.text || "Não informado";
 
   // Telefones
-  const phoneNumbers =
-    data.phones
-      ?.map((phone) => {
-        if (phone.area && phone.number) {
-          return formatPhone(`${phone.area}${phone.number}`);
-        }
-        return phone.number;
-      })
-      .join(", ") || "Não informado";
+  const phoneNumbers = data.phones?.map((phone) => {
+    if (phone.area && phone.number) {
+      return formatPhone(`${phone.area}${phone.number}`);
+    }
+    return phone.number;
+  }).join(", ") || "Não informado";
   phones.textContent = phoneNumbers;
 
   // E-mail
-  const primaryEmail =
-    data.emails?.find((email) => email.ownership === "CORPORATE") ||
-    data.emails?.[0];
+  const primaryEmail = data.emails?.find((email) => email.ownership === "CORPORATE") || data.emails?.[0];
   email.textContent = primaryEmail?.address || "Não informado";
 
   // Sócios e Administradores
@@ -307,28 +279,21 @@ function displayData(data) {
 function getPrincipalIE(registrations) {
   console.log("🔍 Buscando IE em registrations:", registrations);
   
-  if (!registrations || !Array.isArray(registrations)) {
-    console.log("❌ Registrations não é array ou é inválido");
+  if (!registrations || !Array.isArray(registrations) || registrations.length === 0) {
+    console.log("❌ Nenhum registro de IE encontrado");
     return null;
   }
 
-  if (registrations.length === 0) {
-    console.log("⚠️ Array registrations está vazio");
-    return null;
-  }
+  console.log(`✅ Encontradas ${registrations.length} IEs`);
 
   // Buscar IE Normal primeiro (type.id === 1)
-  const ieNormal = registrations.find((reg) => {
-    console.log("📋 Analisando registro:", reg);
-    return reg.type?.id === 1;
-  });
-  
+  const ieNormal = registrations.find((reg) => reg.type?.id === 1);
   if (ieNormal) {
     console.log("✅ IE Normal encontrada:", ieNormal);
     return `${ieNormal.number} (${ieNormal.state})`;
   }
 
-  // Se não encontrar IE Normal, buscar a primeira IE ativa (enabled: true)
+  // Se não encontrar IE Normal, buscar a primeira IE ativa
   const primeiraAtiva = registrations.find((reg) => reg.enabled === true);
   if (primeiraAtiva) {
     console.log("✅ Primeira IE ativa encontrada:", primeiraAtiva);
@@ -337,13 +302,8 @@ function getPrincipalIE(registrations) {
 
   // Se não encontrar ativa, retornar a primeira disponível
   const primeira = registrations[0];
-  if (primeira) {
-    console.log("✅ Primeira IE disponível:", primeira);
-    return `${primeira.number} (${primeira.state})`;
-  }
-
-  console.log("❌ Nenhuma IE encontrada");
-  return null;
+  console.log("✅ Usando primeira IE disponível:", primeira);
+  return `${primeira.number} (${primeima.state})`;
 }
 
 // Função para exibir dados completos
@@ -354,13 +314,7 @@ function displayCompleteData(data) {
 
   // Função auxiliar para criar itens de informação
   const createInfoItem = (label, value) => {
-    if (
-      value === undefined ||
-      value === null ||
-      value === "" ||
-      value === "Não informado"
-    )
-      return null;
+    if (value === undefined || value === null || value === "" || value === "Não informado") return null;
 
     const item = document.createElement("div");
     item.className = "info-item";
@@ -391,10 +345,7 @@ function displayCompleteData(data) {
     { label: "Razão Social", value: data.company?.name },
     { label: "Nome Fantasia", value: data.alias },
     { label: "Data de Abertura", value: formatDate(data.founded) },
-    {
-      label: "Data da Última Atualização",
-      value: formatDateTime(data.updated),
-    },
+    { label: "Data da Última Atualização", value: formatDateTime(data.updated) },
     { label: "Situação Cadastral", value: data.status?.text },
     { label: "Data da Situação", value: formatDate(data.statusDate) },
     { label: "Matriz/Filial", value: data.head ? "Matriz" : "Filial" },
@@ -407,36 +358,25 @@ function displayCompleteData(data) {
 
   // Natureza Jurídica e Porte
   if (data.company?.nature) {
-    const item = createInfoItem(
-      "Natureza Jurídica",
-      `${data.company.nature.id} - ${data.company.nature.text}`
-    );
+    const item = createInfoItem("Natureza Jurídica", `${data.company.nature.id} - ${data.company.nature.text}`);
     if (item) completeData.appendChild(item);
   }
 
   if (data.company?.size) {
-    const item = createInfoItem(
-      "Porte da Empresa",
-      `${data.company.size.text} (${data.company.size.acronym})`
-    );
+    const item = createInfoItem("Porte da Empresa", `${data.company.size.text} (${data.company.size.acronym})`);
     if (item) completeData.appendChild(item);
   }
 
   // Capital Social
   if (data.company?.equity) {
-    const item = createInfoItem(
-      "Capital Social",
-      `R$ ${formatCurrency(data.company.equity)}`
-    );
+    const item = createInfoItem("Capital Social", `R$ ${formatCurrency(data.company.equity)}`);
     if (item) completeData.appendChild(item);
   }
 
   // Regimes Especiais
   const regimes = [];
   if (data.company?.simples?.optant) {
-    regimes.push(
-      `Simples Nacional desde ${formatDate(data.company.simples.since)}`
-    );
+    regimes.push(`Simples Nacional desde ${formatDate(data.company.simples.since)}`);
   }
   if (data.company?.simei?.optant) {
     regimes.push(`MEI desde ${formatDate(data.company.simei.since)}`);
@@ -470,11 +410,7 @@ function displayCompleteData(data) {
   if (data.phones && data.phones.length > 0) {
     const phonesText = data.phones.map((phone) => {
       const tipo = phone.type === "LANDLINE" ? "Fixo" : "Celular";
-      return `${tipo}: ${
-        phone.area && phone.number
-          ? formatPhone(`${phone.area}${phone.number}`)
-          : phone.number
-      }`;
+      return `${tipo}: ${phone.area && phone.number ? formatPhone(`${phone.area}${phone.number}`) : phone.number}`;
     });
     const item = createInfoItem("Telefones", phonesText);
     if (item) completeData.appendChild(item);
@@ -491,17 +427,12 @@ function displayCompleteData(data) {
 
   // Atividades Econômicas
   if (data.mainActivity) {
-    const item = createInfoItem(
-      "CNAE Principal",
-      `${data.mainActivity.id} - ${data.mainActivity.text}`
-    );
+    const item = createInfoItem("CNAE Principal", `${data.mainActivity.id} - ${data.mainActivity.text}`);
     if (item) completeData.appendChild(item);
   }
 
   if (data.sideActivities && data.sideActivities.length > 0) {
-    const secondaryActivities = data.sideActivities.map(
-      (activity) => `${activity.id} - ${activity.text}`
-    );
+    const secondaryActivities = data.sideActivities.map((activity) => `${activity.id} - ${activity.text}`);
     const item = createInfoItem("CNAEs Secundários", secondaryActivities);
     if (item) completeData.appendChild(item);
   }
@@ -527,9 +458,7 @@ function displayCompleteData(data) {
 
     // Incentivos fiscais da SUFRAMA
     if (data.suframa[0].incentives && data.suframa[0].incentives.length > 0) {
-      const incentivos = data.suframa[0].incentives.map(
-        (inc) => `${inc.tribute}: ${inc.benefit} - ${inc.purpose}`
-      );
+      const incentivos = data.suframa[0].incentives.map((inc) => `${inc.tribute}: ${inc.benefit} - ${inc.purpose}`);
       const itemInc = createInfoItem("Incentivos Fiscais SUFRAMA", incentivos);
       if (itemInc) completeData.appendChild(itemInc);
     }
@@ -556,9 +485,7 @@ function displayPartners(members) {
   }
 
   // Ordenar por data (mais recente primeiro)
-  const sortedMembers = [...members].sort(
-    (a, b) => new Date(b.since) - new Date(a.since)
-  );
+  const sortedMembers = [...members].sort((a, b) => new Date(b.since) - new Date(a.since));
 
   // Limitar a 6 sócios na aba principal
   const displayedMembers = sortedMembers.slice(0, 6);
@@ -577,15 +504,11 @@ function displayPartners(members) {
 
     const partnerSince = document.createElement("div");
     partnerSince.className = "partner-qualification";
-    partnerSince.textContent = `Desde: ${
-      formatDate(member.since) || "Não informado"
-    }`;
+    partnerSince.textContent = `Desde: ${formatDate(member.since) || "Não informado"}`;
 
     const partnerAge = document.createElement("div");
     partnerAge.className = "partner-qualification";
-    partnerAge.textContent = `Faixa Etária: ${
-      member.person?.age || "Não informada"
-    }`;
+    partnerAge.textContent = `Faixa Etária: ${member.person?.age || "Não informada"}`;
 
     partnerItem.appendChild(partnerName);
     partnerItem.appendChild(partnerRole);
@@ -722,6 +645,3 @@ function loadSavedTheme() {
     themeToggle.querySelector(".theme-icon").textContent = "🌙";
   }
 }
-
-// Inicializar tema ao carregar a página
-loadSavedTheme();
