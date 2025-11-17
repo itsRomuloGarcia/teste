@@ -1,79 +1,6 @@
 const API_TOKEN =
   "6c62a7ba-5128-4f3c-864b-01876e7a1832-eda921d0-26e0-4d99-9668-f9cf1c4c8aaa";
 
-// Função para mapear dados da API para estrutura esperada pelo frontend
-function mapDataToFrontendStructure(apiData) {
-  return {
-    taxId: apiData.taxId,
-    alias: apiData.alias,
-    founded: apiData.founded,
-    updated: apiData.updated,
-    status: {
-      text: apiData.status?.text || "Não informado",
-    },
-    statusDate: apiData.statusDate,
-    head: apiData.head,
-
-    // Dados da empresa
-    company: {
-      name: apiData.name,
-      nature: apiData.nature,
-      size: apiData.size,
-      equity: apiData.equity,
-      simples: apiData.simples,
-      simei: apiData.simei,
-      members:
-        apiData.partners?.map((partner) => ({
-          person: {
-            name: partner.name,
-            age: partner.age,
-          },
-          role: {
-            text: partner.role,
-          },
-          since: partner.since,
-        })) || [],
-    },
-
-    // Endereço
-    address: {
-      street: apiData.address?.street,
-      number: apiData.address?.number,
-      details: apiData.address?.details,
-      district: apiData.address?.district,
-      city: apiData.address?.city,
-      state: apiData.address?.state,
-      zip: apiData.address?.zip,
-      country: apiData.address?.country,
-      municipality: apiData.address?.municipality,
-    },
-
-    // Contatos
-    phones: apiData.phones || [],
-    emails: apiData.emails || [],
-
-    // Atividades econômicas
-    mainActivity: apiData.primaryActivity,
-    sideActivities: apiData.secondaryActivities || [],
-
-    // Inscrições estaduais - CORREÇÃO PRINCIPAL
-    registrations: apiData.stateRegistration
-      ? [
-          {
-            type: { id: 1, text: "Normal" },
-            number: apiData.stateRegistration,
-            state: apiData.address?.state,
-            enabled: true,
-            status: { text: "Ativa" },
-          },
-        ]
-      : [],
-
-    // SUFRAMA
-    suframa: apiData.suframa || [],
-  };
-}
-
 export default async function handler(req, res) {
   // Configurar CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -140,29 +67,30 @@ export default async function handler(req, res) {
           message: "Token de API inválido",
         });
       }
-
-      const errorText = await response.text();
       return res.status(response.status).json({
         error: true,
-        message: `Erro na API: ${response.status} - ${errorText}`,
+        message: `Erro na API: ${response.status}`,
       });
     }
 
-    const apiData = await response.json();
-    console.log("✅ Dados recebidos da API");
+    const data = await response.json();
 
-    // Mapear dados para estrutura esperada pelo frontend
-    const mappedData = mapDataToFrontendStructure(apiData);
+    // Log para debug da estrutura dos dados
+    console.log("📦 Estrutura dos dados recebidos:", Object.keys(data));
+    console.log("🔍 Buscando Inscrição Estadual...");
+    console.log("📍 stateRegistration:", data.stateRegistration);
+    console.log("📍 inscricaoEstadual:", data.inscricaoEstadual);
+    console.log("📍 ie:", data.ie);
 
     return res.status(200).json({
       error: false,
-      data: mappedData,
+      data: data,
     });
   } catch (error) {
     console.error("💥 Erro:", error);
     return res.status(500).json({
       error: true,
-      message: "Erro interno do servidor: " + error.message,
+      message: "Erro interno do servidor",
     });
   }
 }
