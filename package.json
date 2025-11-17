@@ -1,0 +1,12 @@
+{
+  "name": "consulta-cnpj",
+  "version": "1.0.0",
+  "description": "Sistema de consulta de CNPJ",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@vercel/node": "^2.0.0"
+  }
+}
