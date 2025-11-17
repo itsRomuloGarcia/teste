@@ -40,7 +40,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Fazer requisição para a API CNPJa conforme documentação
+    // Fazer requisição para a API CNPJa
     const apiUrl = `https://open.cnpja.com/office/${cnpjLimpo}`;
     console.log("📡 Chamando API:", apiUrl);
 
@@ -80,12 +80,36 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Log para debug
-    console.log("📦 Dados recebidos da API CNPJa");
-    console.log("📍 registrations:", data.registrations);
-    console.log("📍 Possui registrations?", !!data.registrations);
+    // LOG COMPLETO DE TODOS OS DADOS
+    console.log("=".repeat(80));
+    console.log("📦 DADOS COMPLETOS DA RESPOSTA DA API CNPJa:");
+    console.log("=".repeat(80));
+    console.log(JSON.stringify(data, null, 2));
+    console.log("=".repeat(80));
+    
+    // Análise específica do campo registrations
+    console.log("🔍 ANÁLISE DO CAMPO REGISTRATIONS:");
+    console.log("📍 data.registrations:", data.registrations);
+    console.log("📍 Tipo:", typeof data.registrations);
     console.log("📍 É array?", Array.isArray(data.registrations));
-    console.log("📍 Quantidade:", data.registrations?.length);
+    console.log("📍 Quantidade de registros:", data.registrations?.length || 0);
+    
+    if (data.registrations && Array.isArray(data.registrations)) {
+      console.log("📍 Conteúdo do array registrations:");
+      data.registrations.forEach((reg, index) => {
+        console.log(`  [${index}] number: ${reg.number}, state: ${reg.state}, type: ${reg.type?.text}`);
+      });
+    }
+    
+    // Buscar por outros campos possíveis de IE
+    console.log("🔍 BUSCA POR OUTROS CAMPOS DE INSCRIÇÃO ESTADUAL:");
+    console.log("📍 data.stateRegistration:", data.stateRegistration);
+    console.log("📍 data.inscricaoEstadual:", data.inscricaoEstadual);
+    console.log("📍 data.ie:", data.ie);
+    
+    // Listar todas as chaves do objeto data
+    console.log("🔍 TODAS AS CHAVES DISPONÍVEIS:");
+    console.log("📍 Object.keys(data):", Object.keys(data));
 
     return res.status(200).json({
       error: false,
