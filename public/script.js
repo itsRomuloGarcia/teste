@@ -73,10 +73,10 @@ function toggleTheme() {
 
   if (isDarkMode) {
     body.classList.remove("dark-mode");
-    themeToggle.querySelector(".theme-icon").textContent = "☀️";
+    themeToggle.querySelector(".theme-icon").textContent = "🌙";
   } else {
     body.classList.add("dark-mode");
-    themeToggle.querySelector(".theme-icon").textContent = "🌙";
+    themeToggle.querySelector(".theme-icon").textContent = "☀️";
   }
 
   // Salvar preferência no localStorage
@@ -242,16 +242,12 @@ function displayData(data) {
   tradeName.textContent = data.alias || data.company?.name || "Não informado";
   cnpj.textContent = formatCNPJString(data.taxId) || "Não informado";
 
-  // Inscrição Estadual - Verificando diferentes possíveis localizações
-  const ieValue =
-    data.stateRegistration ||
-    data.inscricaoEstadual ||
-    data.ie ||
-    "Não informado";
-  ie.textContent = ieValue;
+  // Inscrição Estadual - Buscar no array registrations
+  const iePrincipal = getPrincipalIE(data.registrations);
+  ie.textContent = iePrincipal || "Não informado";
 
   // Situação cadastral com cor
-  const statusText = data.status?.text || data.situacao || "Não informado";
+  const statusText = data.status?.text || "Não informado";
   status.textContent = statusText;
   status.className =
     "value " +
@@ -261,6 +257,7 @@ function displayData(data) {
   const addressParts = [
     data.address?.street,
     data.address?.number,
+    data.address?.details,
     data.address?.district,
     data.address?.city,
     data.address?.state,
@@ -304,6 +301,21 @@ function displayData(data) {
   showResult();
 }
 
+// Função para obter a Inscrição Estadual principal
+function getPrincipalIE(registrations) {
+  if (!registrations || !Array.isArray(registrations)) return null;
+
+  // Buscar IE Normal primeiro
+  const ieNormal = registrations.find((reg) => reg.type?.id === 1);
+  if (ieNormal) return `${ieNormal.number} (${ieNormal.state})`;
+
+  // Se não encontrar, retornar a primeira
+  const primeira = registrations[0];
+  if (primeira) return `${primeira.number} (${primeira.state})`;
+
+  return null;
+}
+
 // Função para exibir dados completos
 function displayCompleteData(data) {
   completeData.innerHTML = "";
@@ -312,7 +324,13 @@ function displayCompleteData(data) {
 
   // Função auxiliar para criar itens de informação
   const createInfoItem = (label, value) => {
-    if (value === undefined || value === null || value === "") return null;
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      value === "Não informado"
+    )
+      return null;
 
     const item = document.createElement("div");
     item.className = "info-item";
@@ -323,7 +341,14 @@ function displayCompleteData(data) {
 
     const valueSpan = document.createElement("span");
     valueSpan.className = "value";
-    valueSpan.textContent = String(value);
+
+    // Se o valor for um array, formatar como lista
+    if (Array.isArray(value)) {
+      if (value.length === 0) return null;
+      valueSpan.innerHTML = value.map((item) => `• ${item}`).join("<br>");
+    } else {
+      valueSpan.textContent = String(value);
+    }
 
     item.appendChild(labelSpan);
     item.appendChild(valueSpan);
@@ -335,15 +360,14 @@ function displayCompleteData(data) {
     { label: "CNPJ", value: formatCNPJString(data.taxId) },
     { label: "Razão Social", value: data.company?.name },
     { label: "Nome Fantasia", value: data.alias },
-    { label: "Inscrição Estadual", value: data.stateRegistration },
-    { label: "Situação Cadastral", value: data.status?.text },
-    { label: "Data de Abertura", value: formatDate(data.opened) },
-    { label: "Natureza Jurídica", value: data.legalNature?.text },
-    { label: "Porte da Empresa", value: data.size?.text },
+    { label: "Data de Abertura", value: formatDate(data.founded) },
     {
-      label: "Capital Social",
-      value: data.capital ? `R$ ${formatCurrency(data.capital)}` : null,
+      label: "Data da Última Atualização",
+      value: formatDateTime(data.updated),
     },
+    { label: "Situação Cadastral", value: data.status?.text },
+    { label: "Data da Situação", value: formatDate(data.statusDate) },
+    { label: "Matriz/Filial", value: data.head ? "Matriz" : "Filial" },
   ];
 
   basicFields.forEach((field) => {
@@ -351,17 +375,59 @@ function displayCompleteData(data) {
     if (item) completeData.appendChild(item);
   });
 
+  // Natureza Jurídica e Porte
+  if (data.company?.nature) {
+    const item = createInfoItem(
+      "Natureza Jurídica",
+      `${data.company.nature.id} - ${data.company.nature.text}`
+    );
+    if (item) completeData.appendChild(item);
+  }
+
+  if (data.company?.size) {
+    const item = createInfoItem(
+      "Porte da Empresa",
+      `${data.company.size.text} (${data.company.size.acronym})`
+    );
+    if (item) completeData.appendChild(item);
+  }
+
+  // Capital Social
+  if (data.company?.equity) {
+    const item = createInfoItem(
+      "Capital Social",
+      `R$ ${formatCurrency(data.company.equity)}`
+    );
+    if (item) completeData.appendChild(item);
+  }
+
+  // Regimes Especiais
+  const regimes = [];
+  if (data.company?.simples?.optant) {
+    regimes.push(
+      `Simples Nacional desde ${formatDate(data.company.simples.since)}`
+    );
+  }
+  if (data.company?.simei?.optant) {
+    regimes.push(`MEI desde ${formatDate(data.company.simei.since)}`);
+  }
+  if (regimes.length > 0) {
+    const item = createInfoItem("Regimes Especiais", regimes);
+    if (item) completeData.appendChild(item);
+  }
+
   // Endereço completo
   if (data.address) {
     const addressFields = [
       { label: "Logradouro", value: data.address.street },
       { label: "Número", value: data.address.number },
-      { label: "Complemento", value: data.address.additional },
+      { label: "Complemento", value: data.address.details },
       { label: "Bairro", value: data.address.district },
       { label: "Cidade", value: data.address.city },
       { label: "Estado", value: data.address.state },
       { label: "CEP", value: formatCEP(data.address.zip) },
-      { label: "País", value: data.address.country },
+      { label: "País", value: data.address.country?.name },
+      { label: "Código Município", value: data.address.municipality },
     ];
 
     addressFields.forEach((field) => {
@@ -372,61 +438,85 @@ function displayCompleteData(data) {
 
   // Contatos
   if (data.phones && data.phones.length > 0) {
-    const phonesText = data.phones
-      .map((phone) =>
+    const phonesText = data.phones.map((phone) => {
+      const tipo = phone.type === "LANDLINE" ? "Fixo" : "Celular";
+      return `${tipo}: ${
         phone.area && phone.number
           ? formatPhone(`${phone.area}${phone.number}`)
           : phone.number
-      )
-      .join(", ");
+      }`;
+    });
     const item = createInfoItem("Telefones", phonesText);
     if (item) completeData.appendChild(item);
   }
 
   if (data.emails && data.emails.length > 0) {
-    const emailsText = data.emails.map((email) => email.address).join(", ");
+    const emailsText = data.emails.map((email) => {
+      const tipo = email.ownership === "CORPORATE" ? "Corporativo" : "Outro";
+      return `${tipo}: ${email.address}`;
+    });
     const item = createInfoItem("E-mails", emailsText);
     if (item) completeData.appendChild(item);
   }
 
-  // Atividades econômicas
+  // Atividades Econômicas
   if (data.mainActivity) {
     const item = createInfoItem(
       "CNAE Principal",
-      `${data.mainActivity.code} - ${data.mainActivity.text}`
+      `${data.mainActivity.id} - ${data.mainActivity.text}`
     );
     if (item) completeData.appendChild(item);
   }
 
-  if (data.secondaryActivities && data.secondaryActivities.length > 0) {
-    const secondaryActivities = data.secondaryActivities
-      .map((activity) => `${activity.code} - ${activity.text}`)
-      .join("; ");
+  if (data.sideActivities && data.sideActivities.length > 0) {
+    const secondaryActivities = data.sideActivities.map(
+      (activity) => `${activity.id} - ${activity.text}`
+    );
     const item = createInfoItem("CNAEs Secundários", secondaryActivities);
     if (item) completeData.appendChild(item);
   }
 
-  // Informações financeiras
-  const financialFields = [
-    {
-      label: "Data da Situação Cadastral",
-      value: formatDate(data.status?.date),
-    },
-    { label: "Motivo da Situação Cadastral", value: data.status?.reason },
-    { label: "Situação Especial", value: data.specialSituation },
-    {
-      label: "Data da Situação Especial",
-      value: formatDate(data.specialSituationDate),
-    },
-  ];
-
-  financialFields.forEach((field) => {
-    const item = createInfoItem(field.label, field.value);
+  // Inscrições Estaduais
+  if (data.registrations && data.registrations.length > 0) {
+    const ies = data.registrations.map((reg) => {
+      const status = reg.enabled ? "✅" : "❌";
+      return `${status} ${reg.number} - ${reg.state} (${reg.type?.text}) - ${reg.status?.text}`;
+    });
+    const item = createInfoItem("Inscrições Estaduais", ies);
     if (item) completeData.appendChild(item);
-  });
+  }
+
+  // SUFRAMA (se existir)
+  if (data.suframa && data.suframa.length > 0) {
+    const suframaItems = data.suframa.map((suf) => {
+      const status = suf.approved ? "✅ Aprovado" : "❌ Pendente";
+      return `Nº: ${suf.number} - ${status} - Desde: ${formatDate(suf.since)}`;
+    });
+    const item = createInfoItem("Registro SUFRAMA", suframaItems);
+    if (item) completeData.appendChild(item);
+
+    // Incentivos fiscais da SUFRAMA
+    if (data.suframa[0].incentives && data.suframa[0].incentives.length > 0) {
+      const incentivos = data.suframa[0].incentives.map(
+        (inc) => `${inc.tribute}: ${inc.benefit} - ${inc.purpose}`
+      );
+      const itemInc = createInfoItem("Incentivos Fiscais SUFRAMA", incentivos);
+      if (itemInc) completeData.appendChild(itemInc);
+    }
+  }
+
+  // Sócios e Administradores
+  if (data.company?.members && data.company.members.length > 0) {
+    const socios = data.company.members.map((member) => {
+      const since = member.since ? ` desde ${formatDate(member.since)}` : "";
+      return `${member.person?.name} - ${member.role?.text}${since}`;
+    });
+    const item = createInfoItem("Sócios e Administradores", socios);
+    if (item) completeData.appendChild(item);
+  }
 }
 
-// Função para exibir os sócios
+// Função para exibir os sócios na aba principal
 function displayPartners(members) {
   partnersList.innerHTML = "";
 
@@ -440,7 +530,10 @@ function displayPartners(members) {
     (a, b) => new Date(b.since) - new Date(a.since)
   );
 
-  sortedMembers.forEach((member) => {
+  // Limitar a 6 sócios na aba principal
+  const displayedMembers = sortedMembers.slice(0, 6);
+
+  displayedMembers.forEach((member) => {
     const partnerItem = document.createElement("div");
     partnerItem.className = "partner-item";
 
@@ -471,6 +564,18 @@ function displayPartners(members) {
 
     partnersList.appendChild(partnerItem);
   });
+
+  // Mostrar contador se houver mais sócios
+  if (sortedMembers.length > 6) {
+    const morePartners = document.createElement("div");
+    morePartners.className = "partner-more";
+    morePartners.textContent = `+ ${sortedMembers.length - 6} outros sócios...`;
+    morePartners.style.textAlign = "center";
+    morePartners.style.padding = "10px";
+    morePartners.style.color = "var(--text-secondary)";
+    morePartners.style.fontStyle = "italic";
+    partnersList.appendChild(morePartners);
+  }
 
   partnersCard.classList.remove("hidden");
 }
@@ -511,6 +616,17 @@ function formatDate(dateString) {
     return date.toLocaleDateString("pt-BR");
   } catch (e) {
     return dateString;
+  }
+}
+
+// Função para formatar data e hora
+function formatDateTime(dateTimeString) {
+  if (!dateTimeString) return "";
+  try {
+    const date = new Date(dateTimeString);
+    return date.toLocaleString("pt-BR");
+  } catch (e) {
+    return dateTimeString;
   }
 }
 
