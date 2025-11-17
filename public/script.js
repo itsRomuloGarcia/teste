@@ -236,14 +236,16 @@ function displayData(data) {
   }
 
   console.log("📦 Estrutura completa dos dados:", data);
+  console.log("📋 Dados completos do registrations:", data.registrations);
 
   // Dados básicos da empresa (Aba Principal)
   companyName.textContent = data.company?.name || "Não informado";
   tradeName.textContent = data.alias || data.company?.name || "Não informado";
   cnpj.textContent = formatCNPJString(data.taxId) || "Não informado";
 
-  // Inscrição Estadual - Buscar no array registrations
+  // Inscrição Estadual - Buscar no array registrations (CORRIGIDO)
   const iePrincipal = getPrincipalIE(data.registrations);
+  console.log("🎯 IE Principal encontrada:", iePrincipal);
   ie.textContent = iePrincipal || "Não informado";
 
   // Situação cadastral com cor
@@ -301,18 +303,46 @@ function displayData(data) {
   showResult();
 }
 
-// Função para obter a Inscrição Estadual principal
+// Função para obter a Inscrição Estadual principal - CORRIGIDA
 function getPrincipalIE(registrations) {
-  if (!registrations || !Array.isArray(registrations)) return null;
+  console.log("🔍 Buscando IE em registrations:", registrations);
+  
+  if (!registrations || !Array.isArray(registrations)) {
+    console.log("❌ Registrations não é array ou é inválido");
+    return null;
+  }
 
-  // Buscar IE Normal primeiro
-  const ieNormal = registrations.find((reg) => reg.type?.id === 1);
-  if (ieNormal) return `${ieNormal.number} (${ieNormal.state})`;
+  if (registrations.length === 0) {
+    console.log("⚠️ Array registrations está vazio");
+    return null;
+  }
 
-  // Se não encontrar, retornar a primeira
+  // Buscar IE Normal primeiro (type.id === 1)
+  const ieNormal = registrations.find((reg) => {
+    console.log("📋 Analisando registro:", reg);
+    return reg.type?.id === 1;
+  });
+  
+  if (ieNormal) {
+    console.log("✅ IE Normal encontrada:", ieNormal);
+    return `${ieNormal.number} (${ieNormal.state})`;
+  }
+
+  // Se não encontrar IE Normal, buscar a primeira IE ativa (enabled: true)
+  const primeiraAtiva = registrations.find((reg) => reg.enabled === true);
+  if (primeiraAtiva) {
+    console.log("✅ Primeira IE ativa encontrada:", primeiraAtiva);
+    return `${primeiraAtiva.number} (${primeiraAtiva.state})`;
+  }
+
+  // Se não encontrar ativa, retornar a primeira disponível
   const primeira = registrations[0];
-  if (primeira) return `${primeira.number} (${primeira.state})`;
+  if (primeira) {
+    console.log("✅ Primeira IE disponível:", primeira);
+    return `${primeira.number} (${primeira.state})`;
+  }
 
+  console.log("❌ Nenhuma IE encontrada");
   return null;
 }
 
