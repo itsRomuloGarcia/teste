@@ -1,5 +1,4 @@
-const API_TOKEN =
-  "6c62a7ba-5128-4f3c-864b-01876e7a1832-eda921d0-26e0-4d99-9668-f9cf1c4c8aaa";
+const API_TOKEN = "6c62a7ba-5128-4f3c-864b-01876e7a1832-eda921d0-26e0-4d99-9668-f9cf1c4c8aaa";
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -41,7 +40,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Fazer requisição para a API CNPJa
+    // Fazer requisição para a API CNPJa conforme documentação
     const apiUrl = `https://open.cnpja.com/office/${cnpjLimpo}`;
     console.log("📡 Chamando API:", apiUrl);
 
@@ -67,6 +66,12 @@ export default async function handler(req, res) {
           message: "Token de API inválido",
         });
       }
+      if (response.status === 429) {
+        return res.status(429).json({
+          error: true,
+          message: "Limite de requisições excedido",
+        });
+      }
       return res.status(response.status).json({
         error: true,
         message: `Erro na API: ${response.status}`,
@@ -75,12 +80,12 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Log para debug da estrutura dos dados
-    console.log("📦 Estrutura dos dados recebidos:", Object.keys(data));
-    console.log("🔍 Buscando Inscrição Estadual...");
-    console.log("📍 stateRegistration:", data.stateRegistration);
-    console.log("📍 inscricaoEstadual:", data.inscricaoEstadual);
-    console.log("📍 ie:", data.ie);
+    // Log para debug
+    console.log("📦 Dados recebidos da API CNPJa");
+    console.log("📍 registrations:", data.registrations);
+    console.log("📍 Possui registrations?", !!data.registrations);
+    console.log("📍 É array?", Array.isArray(data.registrations));
+    console.log("📍 Quantidade:", data.registrations?.length);
 
     return res.status(200).json({
       error: false,
