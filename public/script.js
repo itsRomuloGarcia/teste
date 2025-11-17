@@ -525,10 +525,14 @@ function displayPartners(members) {
     return;
   }
 
+  console.log("👥 Sócios encontrados:", members);
+
   // Ordenar por data (mais recente primeiro)
-  const sortedMembers = [...members].sort(
-    (a, b) => new Date(b.since) - new Date(a.since)
-  );
+  const sortedMembers = [...members].sort((a, b) => {
+    const dateA = a.since ? new Date(a.since) : new Date(0);
+    const dateB = b.since ? new Date(b.since) : new Date(0);
+    return dateB - dateA;
+  });
 
   // Limitar a 6 sócios na aba principal
   const displayedMembers = sortedMembers.slice(0, 6);
@@ -539,7 +543,7 @@ function displayPartners(members) {
 
     const partnerName = document.createElement("div");
     partnerName.className = "partner-name";
-    partnerName.textContent = member.person?.name || "Não informado";
+    partnerName.textContent = member.person?.name || "Nome não informado";
 
     const partnerRole = document.createElement("div");
     partnerRole.className = "partner-document";
@@ -548,7 +552,7 @@ function displayPartners(members) {
     const partnerSince = document.createElement("div");
     partnerSince.className = "partner-qualification";
     partnerSince.textContent = `Desde: ${
-      formatDate(member.since) || "Não informado"
+      formatDate(member.since) || "Data não informada"
     }`;
 
     const partnerAge = document.createElement("div");
